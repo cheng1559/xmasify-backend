@@ -1,18 +1,43 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Bind resources to your worker in `wrangler.toml`. After adding bindings, a type definition for the
- * `Env` object can be regenerated with `npm run cf-typegen`.
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
+export interface Env {
+	AI: Ai;
+}
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
-		return new Response('Hello World!');
+		if (request.method !== 'POST') {
+			return new Response('Method Not Allowed', { status: 405 });
+		}
+
+		const formData = await request.formData();
+
+		const avatarFile = formData.get('avatar') as File;
+		const maskFile = formData.get('mask') as File;
+		const prompt = formData.get('prompt') as string;
+
+		if (!avatarFile || !maskFile || !prompt) {
+			return new Response('Missing avatar, mask, or prompt', { status: 400 });
+		}
+
+		const avatarBuffer = await avatarFile.arrayBuffer();
+		const maskBuffer = await maskFile.arrayBuffer();
+
+		const inputs = {
+			prompt: prompt,  // 可以根据需要调整提示词
+			image: [...new Uint8Array(avatarBuffer)],  // 转换为 Uint8Array 数组
+			mask: [...new Uint8Array(maskBuffer)],    // 转换为 Uint8Array 数组
+			width: 512,
+			height: 512
+		};
+
+		const response = await env.AI.run(
+			"@cf/runwayml/stable-diffusion-v1-5-inpainting",
+			inputs
+		);
+
+		return new Response(response, {
+			headers: {
+				"content-type": "image/png",
+			},
+		});
 	},
 } satisfies ExportedHandler<Env>;
